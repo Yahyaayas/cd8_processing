@@ -299,6 +299,27 @@ def unzip_all_cases(raw_dir: Path, staging_dir: Path = None) -> Path:
     return staging_dir
 
 
+def extract_case_id(filename: str) -> str:
+    """
+    Extract case ID from filename like 'HE_JRS-22-1351-A.svs' -> 'JRS-22-1351-A'.
+
+    Supports formats:
+    - HE_JRS-22-1351-A.svs -> JRS-22-1351-A
+    - IHC_JRS-22-1351-A.svs -> JRS-22-1351-A
+    - HE_JRS-22-1351-A.svs.zip -> JRS-22-1351-A
+    """
+    # Remove extension
+    name = Path(filename).stem
+
+    # Remove HE_ or IHC_ prefix
+    for prefix in ["HE_", "IHC_"]:
+        if name.startswith(prefix):
+            name = name[len(prefix):]
+            break
+
+    return name
+
+
 def get_available_cases(
     raw_dir: Path,
     ihc_label_dir: Path,
@@ -306,6 +327,8 @@ def get_available_cases(
 ) -> List[dict]:
     """
     Get available cases (have both H&E, IHC SVS and IHC GeoJSON).
+
+    Supports both nested structure (case folders) and flat structure (files directly in raw_dir).
 
     Args:
         raw_dir: Directory with raw data (may contain ZIP files)
@@ -323,7 +346,7 @@ def get_available_cases(
         search_dirs.append(staging_dir)
 
     for search_dir in search_dirs:
-        # Check for case folders
+        # Check for case folders (nested structure)
         for case_folder in search_dir.iterdir():
             if not case_folder.is_dir():
                 continue
@@ -357,6 +380,52 @@ def get_available_cases(
                 break
 
             if he_path and ihc_path and geojson_path:
+                cases.append({
+                    "case_id": case_id,
+                    "he_path": he_path,
+                    "ihc_path": ihc_path,
+                    "geojson_path": geojson_path,
+                })
+
+    # Also check for flat structure (files directly in raw_dir)
+    if not cases and raw_dir.is_dir():
+        # Find all HE_*.svs files
+        he_files = list(raw_dir.glob("HE_*.svs"))
+
+        for he_path in he_files:
+            case_id = extract_case_id(he_path.name)
+
+            # Skip if already processed
+            if any(c["case_id"] == case_id for c in cases):
+                continue
+
+            # Find matching IHC file
+            ihc_pattern = f"IHC_{case_id}.svs"
+            ihc_path = raw_dir / ihc_pattern
+            if not ihc_path.exists():
+                # Try case-insensitive
+                ihc_path = None
+                for f in raw_dir.glob("IHC_*.svs"):
+                    if extract_case_id(f.name) == case_id:
+                        ihc_path = f
+                        break
+
+            if not ihc_path:
+                continue
+
+            # Find IHC GeoJSON
+            geojson_path = None
+            for f in ihc_label_dir.glob(f"IHC_{case_id}*.geojson"):
+                geojson_path = f
+                break
+            if not geojson_path:
+                # Try case-insensitive
+                for f in ihc_label_dir.glob("IHC_*.geojson"):
+                    if extract_case_id(f.name) == case_id:
+                        geojson_path = f
+                        break
+
+            if geojson_path:
                 cases.append({
                     "case_id": case_id,
                     "he_path": he_path,
