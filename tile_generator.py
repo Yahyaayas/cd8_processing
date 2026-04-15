@@ -63,7 +63,7 @@ def process_single_case(
     print(f"  Inliers: {n_inliers}")
 
     print(f"\n[Step 2] PUMA-Classpose inference on H&E")
-    classpose_out = ensure_dir(he_slide.path.parent / "classpose_output")
+    classpose_out = ensure_dir(case_info["he_path"].parent / "classpose_output")
     puma_predictions = run_classpose_on_he(
         case_info["he_path"],
         classpose_out,
