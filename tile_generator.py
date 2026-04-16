@@ -216,6 +216,10 @@ def generate_cd8_tiles(
                 # Clip polygon to tile
                 clipped = p.intersection(tile_box)
                 if not clipped.is_empty:
+                    # Translate to tile-local coordinates (offset by x0, y0)
+                    from shapely.affinity import translate
+                    clipped = translate(clipped, xoff=-x0, yoff=-y0)
+
                     if clipped.geom_type == 'Polygon':
                         tile_polys.append(clipped)
                     elif clipped.geom_type == 'MultiPolygon':
