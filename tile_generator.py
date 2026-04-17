@@ -15,7 +15,8 @@ from shapely.geometry import Polygon
 from . import config
 from .utils import (
     normalize_case_id, ensure_dir, filter_patch,
-    rasterize_polygons_to_mask, match_predictions_to_ground_truth
+    rasterize_polygons_to_mask, rasterize_polygons_to_semantic_mask,
+    match_predictions_to_ground_truth
 )
 from .registration import register_he_to_ihc, extract_registered_patch
 from .classpose_wrapper import (
@@ -106,6 +107,7 @@ def process_single_case(
         he_slide,
         ihc_slide,
         cd8_he_polys,
+        puma_predictions,
         M_ihc2he,
         he_out_dir,
         ihc_out_dir,
@@ -138,6 +140,7 @@ def generate_cd8_tiles(
     he_slide: openslide.OpenSlide,
     ihc_slide: openslide.OpenSlide,
     cd8_polygons: List[Tuple[Polygon, float]],
+    puma_all_predictions: List[Tuple[Polygon, str]],
     M_ihc2he: np.ndarray,
     he_out_dir: Path,
     ihc_out_dir: Path,
@@ -149,11 +152,12 @@ def generate_cd8_tiles(
     Args:
         he_slide: H&E slide
         ihc_slide: IHC slide
-        cd8_polygons: List of (polygon, iou_score) in H&E space
+        cd8_polygons: List of (polygon, iou_score) in H&E space (used for tile centering)
+        puma_all_predictions: All Classpose predictions (polygon, class_name) in H&E space
         M_ihc2he: IHC → H&E transform
         he_out_dir: Output directory for H&E tiles
         ihc_out_dir: Output directory for IHC tiles
-        mask_out_dir: Output directory for masks
+        mask_out_dir: Output directory for masks (semantic PUMA class labels)
 
     Returns:
         Number of tiles generated
@@ -202,8 +206,7 @@ def generate_cd8_tiles(
         if not passed:
             continue
 
-        # Get polygons within this tile for mask
-        tile_polys = []
+        # Build semantic mask from ALL PUMA predictions in this tile
         tile_box = Polygon([
             (x0, y0),
             (x0 + tile_size, y0),
@@ -211,25 +214,26 @@ def generate_cd8_tiles(
             (x0, y0 + tile_size)
         ])
 
-        for p, _ in cd8_polygons:
-            if tile_box.contains(p.centroid) or tile_box.intersects(p):
-                # Clip polygon to tile
-                clipped = p.intersection(tile_box)
-                if not clipped.is_empty:
-                    # Translate to tile-local coordinates (offset by x0, y0)
-                    from shapely.affinity import translate
-                    clipped = translate(clipped, xoff=-x0, yoff=-y0)
+        from shapely.affinity import translate as shp_translate
+        tile_polys_with_class = []
+        for p, class_name in puma_all_predictions:
+            if not (tile_box.contains(p.centroid) or tile_box.intersects(p)):
+                continue
+            clipped = p.intersection(tile_box)
+            if clipped.is_empty:
+                continue
+            clipped = shp_translate(clipped, xoff=-x0, yoff=-y0)
+            class_id = config.PUMA_CLASS_MAP.get(class_name.lower().replace(" ", "_"), 11)
+            geoms = clipped.geoms if clipped.geom_type == 'MultiPolygon' else [clipped]
+            for g in geoms:
+                if g.geom_type == 'Polygon':
+                    tile_polys_with_class.append((g, class_id))
 
-                    if clipped.geom_type == 'Polygon':
-                        tile_polys.append(clipped)
-                    elif clipped.geom_type == 'MultiPolygon':
-                        tile_polys.extend(clipped.geoms)
-
-        if not tile_polys:
+        if not tile_polys_with_class:
             continue
 
-        # Create mask
-        mask = rasterize_polygons_to_mask(tile_polys, (tile_size, tile_size))
+        # Create semantic mask (0=bg, 1-11=PUMA class)
+        mask = rasterize_polygons_to_semantic_mask(tile_polys_with_class, (tile_size, tile_size))
 
         # Save tiles
         tile_name = f"tile_{tile_idx:04d}.png"

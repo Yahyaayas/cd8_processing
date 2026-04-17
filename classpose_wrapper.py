@@ -108,10 +108,9 @@ def run_classpose_inference(
 
 def load_classpose_predictions(
     output_folder: Path,
-    class_name: str = config.LYMPHOCYTE_CLASS,
 ) -> List[Tuple[Polygon, str]]:
     """
-    Load Classpose predictions from GeoJSON files.
+    Load ALL Classpose predictions from GeoJSON files (all PUMA classes).
 
     Returns:
         List of (polygon, class_name) tuples
@@ -125,8 +124,7 @@ def load_classpose_predictions(
     polys = []
     for gj_path in candidates:
         for poly, name in load_geojson_polygons(gj_path):
-            if name is None or class_name.lower() in name.lower():
-                polys.append((poly, name or class_name))
+            polys.append((poly, name or "other"))
 
     return polys
 
@@ -152,7 +150,7 @@ def run_classpose_on_he(
         try:
             polys = load_classpose_predictions(output_folder)
             if polys:
-                print(f"[Classpose] Reusing existing output: {len(polys)} predictions")
+                print(f"[Classpose] Reusing existing output: {len(polys)} predictions (all classes)")
                 return polys
         except FileNotFoundError:
             pass
@@ -162,7 +160,7 @@ def run_classpose_on_he(
 
     # Load results
     polys = load_classpose_predictions(output_folder)
-    print(f"[Classpose] Loaded {len(polys)} lymphocyte predictions")
+    print(f"[Classpose] Loaded {len(polys)} predictions (all PUMA classes)")
 
     return polys
 
