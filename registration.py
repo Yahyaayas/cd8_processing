@@ -137,61 +137,38 @@ def extract_registered_patch(
     M_ihc2he: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Extract H&E patch and corresponding IHC patch (registered to H&E space).
+    Extract H&E patch and corresponding IHC patch at registered coordinates.
+
+    IHC is NOT warped — instead the tile top-left (x, y) is transformed into
+    IHC space and the IHC patch is read directly there. This avoids blank tiles
+    from incorrect warp lookups outside the IHC region.
 
     Args:
         he_slide: H&E slide object
         ihc_slide: IHC slide object
         x, y: Top-left corner in H&E level-0 coords
         size: Patch size
-        M_ihc2he: Transform from IHC to H&E coords
+        M_ihc2he: Transform from IHC to H&E coords (inverted to get H&E→IHC)
 
     Returns:
-        (he_patch, ihc_patch) - both in H&E coordinate space
+        (he_patch, ihc_patch) as RGB numpy arrays
     """
     # Extract H&E patch directly
     he_patch = np.array(he_slide.read_region((x, y), 0, (size, size)).convert("RGB"))
 
-    # For IHC: transform H&E patch corners to IHC space
-    corners_he = np.array([
-        [x, y],
-        [x + size, y],
-        [x, y + size],
-        [x + size, y + size],
-    ], dtype=np.float32)
-
-    # Use inverse of M_ihc2he to get H&E -> IHC
+    # Transform H&E top-left corner to IHC space
     M_he2ihc = cv2.invertAffineTransform(M_ihc2he)
-    corners_ihc = cv2.transform(corners_he.reshape(-1, 1, 2), M_he2ihc).reshape(-1, 2)
+    pt_he = np.array([[[x, y]]], dtype=np.float32)
+    pt_ihc = cv2.transform(pt_he, M_he2ihc).reshape(2)
+    x0_ihc = int(round(pt_ihc[0]))
+    y0_ihc = int(round(pt_ihc[1]))
 
-    # Get bounding box in IHC space
-    x0_ihc = int(np.floor(corners_ihc[:, 0].min()))
-    y0_ihc = int(np.floor(corners_ihc[:, 1].min()))
-    x1_ihc = int(np.ceil(corners_ihc[:, 0].max()))
-    y1_ihc = int(np.ceil(corners_ihc[:, 1].max()))
-
-    # Clip to IHC slide dimensions
+    # Clamp to IHC slide boundaries
     iw, ih = ihc_slide.dimensions
-    x0_ihc = max(0, x0_ihc)
-    y0_ihc = max(0, y0_ihc)
-    x1_ihc = min(iw, x1_ihc)
-    y1_ihc = min(ih, y1_ihc)
+    x0_ihc = max(0, min(x0_ihc, iw - size))
+    y0_ihc = max(0, min(y0_ihc, ih - size))
 
-    w_ihc = max(x1_ihc - x0_ihc, 1)
-    h_ihc = max(y1_ihc - y0_ihc, 1)
-
-    # Read IHC region
-    ihc_region = np.array(ihc_slide.read_region((x0_ihc, y0_ihc), 0, (w_ihc, h_ihc)).convert("RGB"))
-
-    # Create local transform to warp IHC region to H&E patch space
-    M_local = M_he2ihc.copy()
-    M_local[0, 2] -= x0_ihc
-    M_local[1, 2] -= y0_ihc
-
-    # Warp IHC to match H&E patch
-    ihc_patch = cv2.warpAffine(ihc_region, M_local, (size, size),
-                                flags=cv2.INTER_LINEAR,
-                                borderMode=cv2.BORDER_CONSTANT,
-                                borderValue=(255, 255, 255))
+    # Read IHC patch at registered position — same tile size, no warping
+    ihc_patch = np.array(ihc_slide.read_region((x0_ihc, y0_ihc), 0, (size, size)).convert("RGB"))
 
     return he_patch, ihc_patch
