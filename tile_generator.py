@@ -31,6 +31,7 @@ def process_single_case(
     case_info: Dict,
     output_base: Path,
     force_rerun_classpose: bool = False,
+    cd8_class_id: int = 12,
 ) -> Dict:
     """
     Process a single case: generate tiles with CD8+ nuclei.
@@ -54,6 +55,23 @@ def process_single_case(
     he_out_dir = ensure_dir(output_base / "he_tiles" / f"{norm_id}-he")
     ihc_out_dir = ensure_dir(output_base / "ihc_tiles" / f"{norm_id}-ihc")
     mask_out_dir = ensure_dir(output_base / "mask_tiles" / f"{norm_id}-mask")
+
+    existing_tiles = list(he_out_dir.glob("tile_*.png"))
+    if existing_tiles:
+        print(f"  Found {len(existing_tiles)} existing tiles — skipping case.")
+        return {
+            "case_id": case_id,
+            "registration_inliers": 0,
+            "puma_predictions": 0,
+            "ihc_positive_cells": 0,
+            "cd8_matched": 0,
+            "cd8_excluded": 0,
+            "tiles_generated": len(existing_tiles),
+            "he_tiles_dir": str(he_out_dir),
+            "ihc_tiles_dir": str(ihc_out_dir),
+            "mask_tiles_dir": str(mask_out_dir),
+            "skipped": True,
+        }
 
     # Open slides
     he_slide = openslide.OpenSlide(str(case_info["he_path"]))
@@ -111,7 +129,8 @@ def process_single_case(
         M_ihc2he,
         he_out_dir,
         ihc_out_dir,
-        mask_out_dir
+        mask_out_dir,
+        cd8_class_id
     )
 
     summary = {
@@ -145,6 +164,7 @@ def generate_cd8_tiles(
     he_out_dir: Path,
     ihc_out_dir: Path,
     mask_out_dir: Path,
+    cd8_class_id: int = 12,
 ) -> int:
     """
     Generate 1024x1024 tiles centered on CD8+ nuclei.
@@ -216,6 +236,8 @@ def generate_cd8_tiles(
 
         from shapely.affinity import translate as shp_translate
         tile_polys_with_class = []
+        has_cd8 = False
+        
         for p, class_name in puma_all_predictions:
             if not (tile_box.contains(p.centroid) or tile_box.intersects(p)):
                 continue
@@ -223,13 +245,26 @@ def generate_cd8_tiles(
             if clipped.is_empty:
                 continue
             clipped = shp_translate(clipped, xoff=-x0, yoff=-y0)
-            class_id = config.PUMA_CLASS_MAP.get(class_name.lower().replace(" ", "_"), 11)
+            
+            # Check if this polygon is CD8+ (in cd8_polygons list)
+            is_cd8 = any(p.equals(cd8_poly) for cd8_poly, _ in cd8_polygons)
+            
+            if is_cd8:
+                class_id = cd8_class_id
+                has_cd8 = True
+            else:
+                class_id = config.PUMA_CLASS_MAP.get(class_name.lower().replace(" ", "_"), 11)
+            
             geoms = clipped.geoms if clipped.geom_type == 'MultiPolygon' else [clipped]
             for g in geoms:
                 if g.geom_type == 'Polygon':
                     tile_polys_with_class.append((g, class_id))
 
         if not tile_polys_with_class:
+            continue
+        
+        # Skip tiles with no CD8+ nuclei
+        if not has_cd8:
             continue
 
         # Create semantic mask (0=bg, 1-11=PUMA class)
