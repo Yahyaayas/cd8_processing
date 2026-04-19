@@ -107,7 +107,7 @@ def main():
             summary = process_single_case(
                 case_info,
                 output_base,
-                force_rerun_classpose=args.rerun_classpose
+                force_rerun_classpose=args.rerun_classpose,
             )
             summaries.append(summary)
         except Exception as e:

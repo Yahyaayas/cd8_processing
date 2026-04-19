@@ -31,7 +31,7 @@ def process_single_case(
     case_info: Dict,
     output_base: Path,
     force_rerun_classpose: bool = False,
-    cd8_class_id: int = 12,
+    cd8_class_id: int = None,
 ) -> Dict:
     """
     Process a single case: generate tiles with CD8+ nuclei.
@@ -46,6 +46,9 @@ def process_single_case(
     """
     case_id = case_info["case_id"]
     norm_id = normalize_case_id(case_id)
+
+    if cd8_class_id is None:
+        cd8_class_id = config.CD8_CLASS_ID
 
     print(f"\n{'='*60}")
     print(f"Processing case: {case_id}")
@@ -93,30 +96,41 @@ def process_single_case(
     ihc_polygons = load_geojson_polygons(case_info["geojson_path"])
     print(f"  IHC positive cells: {len(ihc_polygons)}")
 
-    print(f"\n[Step 4] Transform PUMA predictions to IHC space")
-    puma_ihc = transform_polygons_to_ihc_space(
-        [(p, c) for p, c in puma_predictions],
+    # Filter only lymphocytes from PUMA predictions for CD8 matching
+    lymphocyte_predictions = [
+        (p, c) for p, c in puma_predictions
+        if c and c.lower() == "lymphocyte"
+    ]
+    print(f"  PUMA lymphocytes: {len(lymphocyte_predictions)}")
+
+    print(f"\n[Step 4] Transform lymphocyte predictions to IHC space")
+    lymph_ihc = transform_polygons_to_ihc_space(
+        lymphocyte_predictions,
         M_he2ihc
     )
-    puma_ihc_polys = [p for p, _ in puma_ihc]
+    lymph_ihc_polys = [(p, orig) for (p, _), (_, orig) in zip(lymph_ihc, lymphocyte_predictions)]
     ihc_gt_polys = [p for p, _ in ihc_polygons]
 
-    print(f"\n[Step 5] IoU matching (threshold = {config.IOU_THRESHOLD})")
+    print(f"\n[Step 5] IoU matching — lymphocytes vs IHC labels (threshold = {config.IOU_THRESHOLD})")
     matched, excluded = match_predictions_to_ground_truth(
-        puma_ihc_polys,
+        [p for p, _ in lymph_ihc_polys],
         ihc_gt_polys,
         config.IOU_THRESHOLD
     )
     print(f"  CD8+ (matched): {len(matched)}")
     print(f"  Excluded: {len(excluded)}")
 
-    # Transform matched CD8+ polygons back to H&E space
-    print(f"\n[Step 6] Transform CD8+ polygons to H&E space")
+    # Build lookup: IHC-space polygon → original H&E polygon
+    ihc_to_he = {p.wkt: orig for p, orig in lymph_ihc_polys}
+
+    # Get CD8+ polygons back in H&E space using correct references
+    print(f"\n[Step 6] Collect CD8+ polygons in H&E space")
     cd8_he_polys = []
-    for i, (poly, iou) in enumerate(matched):
-        # Get original polygon from matched list
-        orig_poly = puma_predictions[i][0]  # Original in H&E space
-        cd8_he_polys.append((orig_poly, iou))
+    for ihc_poly, iou in matched:
+        he_orig = ihc_to_he.get(ihc_poly.wkt)
+        if he_orig is None:
+            continue
+        cd8_he_polys.append((he_orig, iou))
 
     print(f"  CD8+ nuclei in H&E space: {len(cd8_he_polys)}")
 
@@ -164,7 +178,7 @@ def generate_cd8_tiles(
     he_out_dir: Path,
     ihc_out_dir: Path,
     mask_out_dir: Path,
-    cd8_class_id: int = 12,
+    cd8_class_id: int = None,
 ) -> int:
     """
     Generate 1024x1024 tiles centered on CD8+ nuclei.
@@ -184,6 +198,9 @@ def generate_cd8_tiles(
     """
     tile_size = config.TILE_SIZE
     tile_idx = 0
+
+    if cd8_class_id is None:
+        cd8_class_id = config.CD8_CLASS_ID
 
     # Get slide dimensions
     he_w, he_h = he_slide.dimensions

@@ -132,6 +132,40 @@ def rasterize_polygons_to_mask(
     return mask
 
 
+def rasterize_polygons_to_semantic_mask(
+    polygons_with_classes: List[Tuple[Polygon, int]],
+    mask_shape: Tuple[int, int],
+) -> np.ndarray:
+    """
+    Rasterize polygons to a semantic class mask.
+
+    Args:
+        polygons_with_classes: List of (polygon, class_id) in tile-local coords
+        mask_shape: (height, width) of output mask
+
+    Returns:
+        uint8 semantic mask with class IDs (0=background, 1-11=PUMA classes)
+    """
+    h, w = mask_shape
+    mask = np.zeros((h, w), dtype=np.uint8)
+
+    for poly, class_id in polygons_with_classes:
+        minx, miny, maxx, maxy = poly.bounds
+        x0, y0 = int(max(0, minx)), int(max(0, miny))
+        x1, y1 = int(min(w, maxx)), int(min(h, maxy))
+
+        if x1 <= x0 or y1 <= y0:
+            continue
+
+        temp_mask = np.zeros((y1 - y0, x1 - x0), dtype=np.uint8)
+        contour = polygon_to_cv2_contour(poly)
+        contour_offset = contour - np.array([x0, y0])
+        cv2.fillPoly(temp_mask, [contour_offset.astype(np.int32)], 255)
+        mask[y0:y1, x0:x1][temp_mask > 0] = class_id
+
+    return mask
+
+
 def calculate_iou(poly1: Polygon, poly2: Polygon) -> float:
     """Calculate IoU between two polygons."""
     if not poly1.intersects(poly2):
@@ -153,7 +187,7 @@ def match_predictions_to_ground_truth(
         (matched, unmatched) where each is list of (polygon, iou_score)
     """
     if not gt_polys:
-        return [(p, 0.0) for p in pred_polys], []
+        return [], [(p, 0.0) for p in pred_polys]
 
     tree = STRtree(gt_polys)
     matched, unmatched = [], []
