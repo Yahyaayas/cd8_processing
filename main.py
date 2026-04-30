@@ -1,4 +1,4 @@
-"""
+""" "
 CD8 Tile Processing Pipeline - Main Entry Point
 
 Generates paired H&E/IHC tiles with CD8 masks from WSI data.
@@ -27,29 +27,29 @@ def main():
         "--case",
         type=str,
         default=None,
-        help="Process specific case ID (e.g., JRS-22-1351-A). If not specified, process all cases."
+        help="Process specific case ID (e.g., JRS-22-1351-A). If not specified, process all cases.",
     )
     parser.add_argument(
         "--rerun-classpose",
         action="store_true",
-        help="Force re-run Classpose inference even if output exists"
+        help="Force re-run Classpose inference even if output exists",
     )
     parser.add_argument(
         "--output-dir",
         type=str,
         default=None,
-        help="Custom output directory (default: data/processed)"
+        help="Custom output directory (default: data/processed)",
     )
     parser.add_argument(
         "--unzip",
         action="store_true",
-        help="Unzip ZIP files in raw data directory before processing"
+        help="Unzip ZIP files in raw data directory before processing",
     )
     parser.add_argument(
         "--staging-dir",
         type=str,
         default=None,
-        help="Staging directory for unzipped files (default: data/raw/unzipped)"
+        help="Staging directory for unzipped files (default: data/raw/unzipped)",
     )
 
     args = parser.parse_args()
@@ -113,6 +113,7 @@ def main():
         except Exception as e:
             print(f"ERROR processing {case_info['case_id']}: {e}")
             import traceback
+
             traceback.print_exc()
 
     # Save and print summary

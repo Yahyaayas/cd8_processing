@@ -108,7 +108,7 @@ def process_single_case(
         lymphocyte_predictions,
         M_he2ihc
     )
-    lymph_ihc_polys = [(p, orig) for (p, _), (_, orig) in zip(lymph_ihc, lymphocyte_predictions)]
+    lymph_ihc_polys = [(p_ihc, p_he) for (p_ihc, _), (p_he, _) in zip(lymph_ihc, lymphocyte_predictions)]
     ihc_gt_polys = [p for p, _ in ihc_polygons]
 
     print(f"\n[Step 5] IoU matching — lymphocytes vs IHC labels (threshold = {config.IOU_THRESHOLD})")
@@ -121,7 +121,7 @@ def process_single_case(
     print(f"  Excluded: {len(excluded)}")
 
     # Build lookup: IHC-space polygon → original H&E polygon
-    ihc_to_he = {p.wkt: orig for p, orig in lymph_ihc_polys}
+    ihc_to_he = {p_ihc.wkt: p_he for p_ihc, p_he in lymph_ihc_polys}
 
     # Get CD8+ polygons back in H&E space using correct references
     print(f"\n[Step 6] Collect CD8+ polygons in H&E space")
@@ -197,6 +197,7 @@ def generate_cd8_tiles(
         Number of tiles generated
     """
     tile_size = config.TILE_SIZE
+    max_tile = config.MAX_TILE
     tile_idx = 0
 
     if cd8_class_id is None:
@@ -299,6 +300,9 @@ def generate_cd8_tiles(
 
         if tile_idx % 10 == 0:
             print(f"  Generated {tile_idx} tiles...")
+        
+        if tile_idx > max_tile:
+            break
 
     return tile_idx
 

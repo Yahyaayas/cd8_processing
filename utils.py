@@ -226,19 +226,19 @@ def get_available_cases(raw_dir: Path, ihc_label_dir: Path) -> List[dict]:
 
         # Find H&E SVS
         he_path = None
-        for f in case_folder.glob("HE_*.svs"):
+        for f in case_folder.glob("*_HE.svs"):
             he_path = f
             break
 
         # Find IHC SVS
         ihc_path = None
-        for f in case_folder.glob("IHC_*.svs"):
+        for f in case_folder.glob("*_IHC.svs"):
             ihc_path = f
             break
 
         # Find IHC GeoJSON (in ihc_stain_label folder)
         geojson_path = None
-        for f in ihc_label_dir.glob(f"IHC_{case_id}*.geojson"):
+        for f in ihc_label_dir.glob(f"*{case_id}_IHC.geojson"):
             geojson_path = f
             break
 
@@ -346,7 +346,7 @@ def extract_case_id(filename: str) -> str:
     name = Path(filename).stem
 
     # Remove HE_ or IHC_ prefix
-    for prefix in ["HE_", "IHC_"]:
+    for prefix in ["_IHC", "_HE", "HE_", "IHC_"]:
         if name.startswith(prefix):
             name = name[len(prefix):]
             break
@@ -397,19 +397,19 @@ def get_available_cases(
 
             # Find H&E SVS
             he_path = None
-            for f in case_folder.glob("HE_*.svs"):
+            for f in case_folder.glob("*_HE.svs"):
                 he_path = f
                 break
 
             # Find IHC SVS
             ihc_path = None
-            for f in case_folder.glob("IHC_*.svs"):
+            for f in case_folder.glob("*_IHC.svs"):
                 ihc_path = f
                 break
 
             # Find IHC GeoJSON (in ihc_stain_label folder)
             geojson_path = None
-            for f in ihc_label_dir.glob(f"IHC_{case_id}*.geojson"):
+            for f in ihc_label_dir.glob(f"*{case_id}_IHC.geojson"):
                 geojson_path = f
                 break
 
@@ -424,7 +424,7 @@ def get_available_cases(
     # Also check for flat structure (files directly in raw_dir)
     if not cases and raw_dir.is_dir():
         # Find all HE_*.svs files
-        he_files = list(raw_dir.glob("HE_*.svs"))
+        he_files = list(raw_dir.glob("*_HE.svs"))
 
         for he_path in he_files:
             case_id = extract_case_id(he_path.name)
@@ -434,12 +434,12 @@ def get_available_cases(
                 continue
 
             # Find matching IHC file
-            ihc_pattern = f"IHC_{case_id}.svs"
+            ihc_pattern = f"{case_id}_IHC.svs"
             ihc_path = raw_dir / ihc_pattern
             if not ihc_path.exists():
                 # Try case-insensitive
                 ihc_path = None
-                for f in raw_dir.glob("IHC_*.svs"):
+                for f in raw_dir.glob("*_IHC.svs"):
                     if extract_case_id(f.name) == case_id:
                         ihc_path = f
                         break
@@ -449,12 +449,12 @@ def get_available_cases(
 
             # Find IHC GeoJSON
             geojson_path = None
-            for f in ihc_label_dir.glob(f"IHC_{case_id}*.geojson"):
+            for f in ihc_label_dir.glob(f"*{case_id}_IHC.geojson"):
                 geojson_path = f
                 break
             if not geojson_path:
                 # Try case-insensitive
-                for f in ihc_label_dir.glob("IHC_*.geojson"):
+                for f in ihc_label_dir.glob("*_IHC.geojson"):
                     if extract_case_id(f.name) == case_id:
                         geojson_path = f
                         break

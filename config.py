@@ -9,15 +9,15 @@ from pathlib import Path
 # ============================================================================
 
 # Workspace root
-WORKSPACE = Path(r"D:\Users\aduhr\Documents\Internal Kuliah\File kuliah\Skripsi\Workspace")
+WORKSPACE = Path(r"/home/n207/project-Yahya/image-processing")
 
 # Input paths
-DATA_ROOT = WORKSPACE / "data"
-RAW_DATA_DIR = DATA_ROOT / "raw"
+DATA_ROOT = Path(r"/home/n207/project-Yahya/data")
+RAW_DATA_DIR = Path(r"/home/n207/project-Yahya/data/WSI")
 IHC_LABEL_DIR = DATA_ROOT / "ihc_stain_label"
 
 # Output paths
-PROCESSED_DIR = DATA_ROOT / "processed"
+PROCESSED_DIR = WORKSPACE / "processed_test"
 HE_TILES_DIR = PROCESSED_DIR / "he_tiles"
 IHC_TILES_DIR = PROCESSED_DIR / "ihc_tiles"
 MASK_TILES_DIR = PROCESSED_DIR / "mask_tiles"
@@ -50,6 +50,7 @@ IOU_THRESHOLD = 0.5        # IoU threshold for CD8+ classification
 
 TILE_SIZE = 1024           # Tile size (pixels)
 OVERLAP = 0                # Tile overlap (for grid-based, not used for CD8+ centered)
+MAX_TILE = 8000            # Max tile generated
 
 # ============================================================================
 # TILE FILTERING
@@ -75,7 +76,26 @@ CLASSPOSE_OVERLAP = 64             # Overlap for Classpose
 # CLASSPOSE LYMPHOCYTE FILTER
 # ============================================================================
 
-LYMPHOCYTE_CLASS = "lymphocyte"    # Class name to filter from PUMA
+LYMPHOCYTE_CLASS = "Lymphocyte"    # Class name used for CD8+ IoU matching
+
+# ============================================================================
+# PUMA CLASS MAPPING  (class name → semantic mask ID, 0 = background)
+# ============================================================================
+
+PUMA_CLASS_MAP = {
+    "apoptosis":    1,
+    "tumor":        2,
+    "endothelial":  3,
+    "stroma":       4,
+    "lymphocyte":   5,
+    "histocyte":    6,
+    "epithelial":   7,
+    "melanophage":  8,
+    "other":        9,
+}
+
+# CD8+ class ID (assigned separately via IoU matching, not from PUMA)
+CD8_CLASS_ID = 10
 
 # ============================================================================
 # MISC
